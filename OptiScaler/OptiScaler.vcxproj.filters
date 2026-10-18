@@ -161,6 +161,9 @@
     <ClInclude Include="hooks\Vulkan_Hooks.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="wrapped\dx11_bridge_swapchain.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="wrapped\wrapped_swapchain.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -918,6 +921,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="hooks\Vulkan_Hooks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="wrapped\dx11_bridge_swapchain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="wrapped\wrapped_swapchain.cpp">

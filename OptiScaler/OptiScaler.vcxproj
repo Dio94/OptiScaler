@@ -503,6 +503,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
     <ClInclude Include="menu\menu_overlay_base.h" />
     <ClInclude Include="menu\menu_overlay_dx.h" />
     <ClInclude Include="menu\menu_overlay_vk.h" />
+    <ClInclude Include="wrapped\dx11_bridge_swapchain.h" />
     <ClInclude Include="wrapped\wrapped_swapchain.h" />
     <ClInclude Include="Logger.h" />
     <ClInclude Include="NVNGX_Parameter.h" />
@@ -686,6 +687,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
     <ClCompile Include="menu\menu_overlay_base.cpp" />
     <ClCompile Include="menu\menu_overlay_dx.cpp" />
     <ClCompile Include="menu\menu_overlay_vk.cpp" />
+    <ClCompile Include="wrapped\dx11_bridge_swapchain.cpp" />
     <ClCompile Include="wrapped\wrapped_swapchain.cpp" />
     <ClCompile Include="include\imgui\imgui.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>

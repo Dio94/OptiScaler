@@ -432,6 +432,7 @@ class Config
     // dx11wdx12
     CustomOptional<bool> Dx11DelayedInit { false };
     CustomOptional<bool> DontUseNTShared { true };
+    CustomOptional<bool> Dx11SwapchainBridge { false };
 
     // vulkanwdx12
     CustomOptional<bool> VulkanUseCopyForInputs { false };

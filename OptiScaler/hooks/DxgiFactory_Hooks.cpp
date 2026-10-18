@@ -8,6 +8,7 @@
 
 #include <spoofing/Dxgi_Spoofing.h>
 #include <wrapped/wrapped_swapchain.h>
+#include <wrapped/dx11_bridge_swapchain.h>
 
 #include <magic_enum.hpp>
 #include <detours/detours.h>
@@ -380,7 +381,25 @@ HRESULT DxgiFactoryHooks::CreateSwapChain(IDXGIFactory* realFactory, IUnknown* p
 
         {
             ScopedSkipParentWrapping skipParentWrapping {};
-            result = o_CreateSwapChain(realFactory, pDevice, &localDesc, ppSwapChain);
+
+            // Present Dx11 game through a Dx12 swapchain
+            ID3D11Device* d11Device = nullptr;
+            if (!_skipFGSwapChainCreation && Config::Instance()->Dx11SwapchainBridge.value_or_default() &&
+                pDevice->QueryInterface(IID_PPV_ARGS(&d11Device)) == S_OK)
+            {
+                d11Device->Release();
+
+                result = Dx11BridgeSwapChain::Create(
+                    d11Device, &localDesc,
+                    [realFactory](IUnknown* queue, DXGI_SWAP_CHAIN_DESC* desc, IDXGISwapChain** swapChain)
+                    { return o_CreateSwapChain(realFactory, queue, desc, swapChain); }, ppSwapChain);
+
+                if (result != S_OK)
+                    LOG_ERROR("Dx11 swapchain bridge failed: {:X}, creating Dx11 swapchain", (UINT) result);
+            }
+
+            if (result != S_OK)
+                result = o_CreateSwapChain(realFactory, pDevice, &localDesc, ppSwapChain);
         }
 
         if (!_skipFGSwapChainCreation)

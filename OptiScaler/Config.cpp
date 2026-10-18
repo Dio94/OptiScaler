@@ -589,6 +589,7 @@ bool Config::Reload(std::filesystem::path iniPath)
         {
             Dx11DelayedInit.set_from_config(readInt("Dx11withDx12", "UseDelayedInit"));
             DontUseNTShared.set_from_config(readBool("Dx11withDx12", "DontUseNTShared"));
+            Dx11SwapchainBridge.set_from_config(readBool("Dx11withDx12", "SwapchainBridge"));
         }
 
         // NvApi
@@ -1248,6 +1249,8 @@ bool Config::SaveIni()
     {
         ini.SetValue("Dx11withDx12", "DontUseNTShared",
                      GetBoolValue(Instance()->DontUseNTShared.value_for_config()).c_str());
+        ini.SetValue("Dx11withDx12", "SwapchainBridge",
+                     GetBoolValue(Instance()->Dx11SwapchainBridge.value_for_config()).c_str());
     }
 
     // Logging
