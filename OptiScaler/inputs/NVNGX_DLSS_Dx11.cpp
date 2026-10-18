@@ -183,8 +183,15 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D11_Init_Ext(unsigned long long InApp
 
     if (State::Instance().NvngxDx11Inited)
     {
-        LOG_WARN("NVNGX already inited");
-        return NVSDK_NGX_Result_Success;
+        // Some callers (e.g. Luma) re-init with a new device, keeping the old one leads to device removed
+        if (InDevice == nullptr || InDevice == D3D11Device)
+        {
+            LOG_WARN("NVNGX already inited, device: {:X}", (size_t) InDevice);
+            return NVSDK_NGX_Result_Success;
+        }
+
+        LOG_WARN("NVNGX already inited but device changed: {:X} -> {:X}, re-initing", (size_t) D3D11Device,
+                 (size_t) InDevice);
     }
 
     LOG_INFO("AppId: {0}", InApplicationId);
