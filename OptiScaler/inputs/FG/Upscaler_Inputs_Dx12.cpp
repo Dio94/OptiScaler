@@ -28,7 +28,25 @@ void UpscalerInputsDx12::Reset()
 void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSDK_NGX_Parameter* InParameters,
                                       IFeature_Dx12* feature)
 {
-    Hudfix_Dx12::SetSkipStatus(true);
+    UpscaleStartImpl(_device, InCmdList, InParameters, feature, nullptr, nullptr, false);
+}
+
+void UpscalerInputsDx12::UpscaleStartDx11wDx12(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,
+                                               NVSDK_NGX_Parameter* InParameters, IFeature* feature,
+                                               ID3D12Resource* velocity, ID3D12Resource* depth)
+{
+    if (State::Instance().activeFgInput != FGInput::Upscaler)
+        return;
+
+    UpscaleStartImpl(device, cmdList, InParameters, feature, velocity, depth, true);
+}
+
+void UpscalerInputsDx12::UpscaleStartImpl(ID3D12Device* device, ID3D12GraphicsCommandList* InCmdList,
+                                          NVSDK_NGX_Parameter* InParameters, IFeature* feature,
+                                          ID3D12Resource* paramVelocity, ID3D12Resource* paramDepth, bool fromDx11)
+{
+    if (!fromDx11)
+        Hudfix_Dx12::SetSkipStatus(true);
 
     // FSR Camera values
     float cameraNear = 0.0f;
@@ -85,7 +103,7 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
 
     auto fg = State::Instance().currentFG;
 
-    if (fg == nullptr || State::Instance().activeFgInput != FGInput::Upscaler || _device == nullptr)
+    if (fg == nullptr || State::Instance().activeFgInput != FGInput::Upscaler || device == nullptr)
         return;
 
     FG_Constants fgConstants {};
@@ -107,7 +125,7 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
     if (Config::Instance()->FGAsync.value_or_default())
         fgConstants.flags |= FG_Flags::Async;
 
-    fg->EvaluateState(_device, fgConstants);
+    fg->EvaluateState(device, fgConstants);
 
     int reset = 0;
     InParameters->Get(NVSDK_NGX_Parameter_Reset, &reset);
@@ -127,7 +145,16 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
     fg->SetReset(reset);
     fg->SetInterpolationRect(feature->DisplayWidth(), feature->DisplayHeight());
 
-    Hudfix_Dx12::UpscaleStart();
+    if (!fromDx11)
+        Hudfix_Dx12::UpscaleStart();
+
+    // Shared Dx11 resources are not transitioned on Dx12 side
+    auto mvState = fromDx11 ? D3D12_RESOURCE_STATE_COMMON
+                            : (D3D12_RESOURCE_STATES) Config::Instance()->MVResourceBarrier.value_or(
+                                  D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    auto depthState = fromDx11 ? D3D12_RESOURCE_STATE_COMMON
+                               : (D3D12_RESOURCE_STATES) Config::Instance()->DepthResourceBarrier.value_or(
+                                     D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     // FG Prepare
     UINT frameIndex;
@@ -150,8 +177,8 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
 
         LOG_DEBUG("(FG) copy buffers for fgUpscaledImage[{}], frame: {}", frameIndex, fg->FrameCount());
 
-        ID3D12Resource* paramVelocity = nullptr;
-        if (InParameters->Get(NVSDK_NGX_Parameter_MotionVectors, &paramVelocity) != NVSDK_NGX_Result_Success)
+        if (paramVelocity == nullptr && !fromDx11 &&
+            InParameters->Get(NVSDK_NGX_Parameter_MotionVectors, &paramVelocity) != NVSDK_NGX_Result_Success)
             InParameters->Get(NVSDK_NGX_Parameter_MotionVectors, (void**) &paramVelocity);
 
         if (paramVelocity != nullptr)
@@ -160,8 +187,7 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
             setResource.type = FG_ResourceType::Velocity;
             setResource.cmdList = commandList;
             setResource.resource = paramVelocity;
-            setResource.state = (D3D12_RESOURCE_STATES) Config::Instance()->MVResourceBarrier.value_or(
-                D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            setResource.state = mvState;
             setResource.validity = FG_ResourceValidity::ValidNow;
 
             if (feature->LowResMV())
@@ -178,26 +204,26 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
             fg->SetResource(&setResource);
         }
 
-        ID3D12Resource* paramDepth = nullptr;
-        if (InParameters->Get(NVSDK_NGX_Parameter_Depth, &paramDepth) != NVSDK_NGX_Result_Success)
+        if (paramDepth == nullptr && !fromDx11 &&
+            InParameters->Get(NVSDK_NGX_Parameter_Depth, &paramDepth) != NVSDK_NGX_Result_Success)
             InParameters->Get(NVSDK_NGX_Parameter_Depth, (void**) &paramDepth);
 
         if (paramDepth != nullptr)
         {
             auto done = false;
 
-            if (Config::Instance()->FGEnableDepthScale.value_or_default())
+            if (!fromDx11 && Config::Instance()->FGEnableDepthScale.value_or_default())
             {
                 if (DepthScale == nullptr)
-                    DepthScale = new DS_Dx12("Depth Scale", _device);
+                    DepthScale = new DS_Dx12("Depth Scale", device);
 
-                if (DepthScale->CreateBufferResource(_device, paramDepth, feature->DisplayWidth(),
+                if (DepthScale->CreateBufferResource(device, paramDepth, feature->DisplayWidth(),
                                                      feature->DisplayHeight(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS) &&
                     DepthScale->Buffer() != nullptr)
                 {
                     DepthScale->SetBufferState(InCmdList, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-                    if (DepthScale->Dispatch(_device, InCmdList, paramDepth, DepthScale->Buffer()))
+                    if (DepthScale->Dispatch(device, InCmdList, paramDepth, DepthScale->Buffer()))
                     {
                         Dx12Resource setResource {};
                         setResource.type = FG_ResourceType::Depth;
@@ -223,8 +249,7 @@ void UpscalerInputsDx12::UpscaleStart(ID3D12GraphicsCommandList* InCmdList, NVSD
                 setResource.resource = paramDepth;
                 setResource.width = feature->RenderWidth();
                 setResource.height = feature->RenderHeight();
-                setResource.state = (D3D12_RESOURCE_STATES) Config::Instance()->DepthResourceBarrier.value_or(
-                    D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                setResource.state = depthState;
                 setResource.validity = FG_ResourceValidity::ValidNow;
 
                 fg->SetResource(&setResource);

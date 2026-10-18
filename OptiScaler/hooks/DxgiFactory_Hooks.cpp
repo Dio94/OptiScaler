@@ -365,6 +365,7 @@ HRESULT DxgiFactoryHooks::CreateSwapChain(IDXGIFactory* realFactory, IUnknown* p
     }
 
     HRESULT result = E_FAIL;
+    bool bridgeWithFG = false;
 
     // If FG is disabled or call is coming from FG library
     // Create the DXGI SwapChain and wrap it
@@ -389,13 +390,43 @@ HRESULT DxgiFactoryHooks::CreateSwapChain(IDXGIFactory* realFactory, IUnknown* p
             {
                 d11Device->Release();
 
+                bool fgSwapchain = false;
+
                 result = Dx11BridgeSwapChain::Create(
                     d11Device, &localDesc,
-                    [realFactory](IUnknown* queue, DXGI_SWAP_CHAIN_DESC* desc, IDXGISwapChain** swapChain)
-                    { return o_CreateSwapChain(realFactory, queue, desc, swapChain); }, ppSwapChain);
+                    [realFactory, &fgSwapchain](IUnknown* queue, DXGI_SWAP_CHAIN_DESC* desc,
+                                                IDXGISwapChain** swapChain)
+                    {
+                        // OptiFG needs FG swapchain on bridge's queue
+                        if (State::Instance().activeFgInput == FGInput::Upscaler &&
+                            State::Instance().activeFgOutput == FGOutput::FSRFG)
+                        {
+                            ScopedSkipFGSCCreation skipFGSCCreation {};
+                            auto fgResult = FGHooks::CreateSwapChain(realFactory, queue, desc, swapChain);
 
-                if (result != S_OK)
+                            if (fgResult == S_OK)
+                            {
+                                fgSwapchain = true;
+                                return fgResult;
+                            }
+
+                            LOG_WARN("FG swapchain creation failed: {:X}, using plain Dx12 swapchain",
+                                     (UINT) fgResult);
+                        }
+
+                        return o_CreateSwapChain(realFactory, queue, desc, swapChain);
+                    },
+                    ppSwapChain);
+
+                if (result == S_OK)
+                {
+                    State::Instance().dx11BridgeActive = true;
+                    bridgeWithFG = fgSwapchain;
+                }
+                else
+                {
                     LOG_ERROR("Dx11 swapchain bridge failed: {:X}, creating Dx11 swapchain", (UINT) result);
+                }
             }
 
             if (result != S_OK)
@@ -408,6 +439,14 @@ HRESULT DxgiFactoryHooks::CreateSwapChain(IDXGIFactory* realFactory, IUnknown* p
                 State::Instance().skipHeapCapture = false;
 
             State::Instance().skipDxgiLoadChecks = false;
+        }
+
+        // Like Dx12 FG path, FG swapchain is already wrapped internally and set as currentSwapchain
+        if (bridgeWithFG)
+        {
+            LOG_INFO("Dx11 bridge created with FG swapchain");
+            State::Instance().currentSwapchainDesc = localDesc;
+            return result;
         }
 
         if (result == S_OK)

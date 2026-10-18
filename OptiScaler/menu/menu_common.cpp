@@ -3750,7 +3750,9 @@ bool MenuCommon::RenderMenu()
 
                 // OptiFG requirements
                 auto constexpr optiFgIndex = (uint32_t) FGInput::Upscaler;
-                inputOptions[optiFgIndex].set_disabled(state.api == API::DX11 || state.api == API::Vulkan,
+                // Dx11 is supported when presenting through Dx11 swapchain bridge
+                inputOptions[optiFgIndex].set_disabled((state.api == API::DX11 && !state.dx11BridgeActive) ||
+                                                           state.api == API::Vulkan,
                                                        "Unsupported API");
                 inputOptions[optiFgIndex].set_disabled(state.workingMode == WorkingMode::Nvngx,
                                                        "Unsupported Opti working mode");
@@ -3832,7 +3834,8 @@ bool MenuCommon::RenderMenu()
 
                 // FSR FG output requirements
                 auto constexpr fsrfgOutputIndex = (uint32_t) FGOutput::FSRFG;
-                outputOptions[fsrfgOutputIndex].set_disabled(state.swapchainApi != API::DX12, "Unsupported API");
+                outputOptions[fsrfgOutputIndex].set_disabled(state.swapchainApi != API::DX12 && !state.dx11BridgeActive,
+                                                             "Unsupported API");
 
                 // XeFG output requirements
                 auto constexpr xefgOutputIndex = (uint32_t) FGOutput::XeFG;

@@ -3,6 +3,7 @@
 #include <Util.h>
 
 #include <proxies/FfxApi_Proxy.h>
+#include <inputs/FG/Upscaler_Inputs_Dx12.h>
 
 #include "FSR31Feature_Dx11On12.h"
 
@@ -232,7 +233,12 @@ bool FSR31FeatureDx11on12::Evaluate(ID3D11DeviceContext* InDeviceContext, NVSDK_
             break;
         }
 
-        params.color = ffxApiGetResourceDX12(dx11Color.Dx12Resource, FFX_API_RESOURCE_STATE_COMPUTE_READ);
+        // Frame generation inputs, only possible when presenting through Dx12
+        if (State::Instance().dx11BridgeActive)
+            UpscalerInputsDx12::UpscaleStartDx11wDx12(_dx11on12Device, cmdList, InParameters, this,
+                                                      dx11Mv.Dx12Resource, dx11Depth.Dx12Resource);
+
+        params.color =ffxApiGetResourceDX12(dx11Color.Dx12Resource, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         params.motionVectors = ffxApiGetResourceDX12(dx11Mv.Dx12Resource, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         params.depth = ffxApiGetResourceDX12(dx11Depth.Dx12Resource, FFX_API_RESOURCE_STATE_COMPUTE_READ);
         params.exposure = ffxApiGetResourceDX12(dx11Exp.Dx12Resource, FFX_API_RESOURCE_STATE_COMPUTE_READ);

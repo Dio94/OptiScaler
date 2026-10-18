@@ -178,6 +178,9 @@ class State
     API api = API::NotSelected;
     API swapchainApi = API::NotSelected;
 
+    // Dx11 game is presenting through Dx11BridgeSwapChain (Dx12 swapchain)
+    bool dx11BridgeActive = false;
+
     // Framerate
     bool reflexLimitsFps = false;
     bool reflexShowWarning = false;
